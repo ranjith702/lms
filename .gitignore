@@ -8,3 +8,4 @@ dist/
 test_results/
 *.log
 .playwright-mcp/
+backups/

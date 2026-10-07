@@ -130,9 +130,9 @@ def test_recommendations_and_assistant_endpoints(client, db):
     make_book(db, cat, "Dune", tags=["space"])
     t = login(client, "stu@test.dev")["access_token"]
     recs = client.get("/api/recommendations/me", headers=auth(t)).json()
-    assert set(recs) == {"same_topic", "similar", "also_borrowed", "different", "popular"}
+    assert set(recs) == {"close_in_meaning", "same_topic", "similar", "also_borrowed", "different", "popular"}
     ans = client.post("/api/assistant/ask", json={"question": "space adventure"}, headers=auth(t)).json()
-    assert ans["provider"] == "none" and ans["books"][0]["title"] == "Dune"
+    assert ans["provider"] == "none" and ans["retrieval"] == "keyword" and ans["books"][0]["title"] == "Dune"
     assert stu.id
 
 

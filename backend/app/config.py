@@ -19,9 +19,13 @@ class Settings(BaseSettings):
     fine_per_day: int = 5
     max_active_loans: int = 3
     cors_origins: str = "http://localhost:5173"
+    # AI: "none" = keyword search + templated answer; "openrouter" = embeddings + Claude via OpenRouter
     ai_provider: str = "none"
     openrouter_api_key: str = ""
-    openrouter_model: str = ""
+    openrouter_model: str = "anthropic/claude-haiku-4.5"   # the LLM that writes answers
+    embedding_model: str = "nvidia/nemotron-3-embed-1b:free"
+    embedding_dim: int = 2048
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
 
 @lru_cache

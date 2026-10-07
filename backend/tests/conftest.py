@@ -1,8 +1,13 @@
 """Shared pytest fixtures. Tests run against the separate lms_test database."""
-from datetime import datetime, timedelta, timezone
+import os
 
-import pytest
-from fastapi.testclient import TestClient
+# Tests never call real AI APIs (cost, flakiness): env vars beat .env, and this runs before app import.
+os.environ["LMS_AI_PROVIDER"] = "none"
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 

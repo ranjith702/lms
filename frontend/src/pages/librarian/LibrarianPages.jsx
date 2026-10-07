@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, fmtDate, fmtDateTime } from '../../api/client'
 import BookCard from '../../components/BookCard'
+import RichText from '../../components/RichText'
 import {
   Button, Empty, ErrorNote, Loading, PageHeader, Panel, Stat, StatusPill, TrustBadge, useApi, useToast,
 } from '../../components/ui'
@@ -25,7 +26,7 @@ export function Desk() {
     <>
       <PageHeader title="Librarian desk" intro="What needs attention today." />
       <ErrorNote error={dash.error} />
-      {dash.loading ? <Loading /> : (
+      {dash.loading ? <Loading /> : !dash.data ? null : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <Stat label="Titles in catalog" value={d.books} />
@@ -67,7 +68,7 @@ export function Requests() {
     <>
       <PageHeader title="Requests" intro="Students below trust 70 need your approval. The copy is already set aside for them; rejecting puts it back on the shelf." />
       <ErrorNote error={pending.error} />
-      {pending.loading ? <Loading /> : pending.data.length === 0 ? <Empty>No requests waiting.</Empty> : (
+      {pending.loading ? <Loading /> : !pending.data ? null : pending.data.length === 0 ? <Empty>No requests waiting.</Empty> : (
         <Panel>
           <ul className="divide-y divide-line">
             {pending.data.map((l) => {
@@ -114,7 +115,7 @@ export function Loans() {
         ))}
       </div>
       <ErrorNote error={loans.error} />
-      {loans.loading ? <Loading /> : loans.data.length === 0 ? <Empty>Nothing here.</Empty> : (
+      {loans.loading ? <Loading /> : !loans.data ? null : loans.data.length === 0 ? <Empty>Nothing here.</Empty> : (
         <Panel>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -159,7 +160,7 @@ export function Fines() {
         </select>
       </PageHeader>
       <ErrorNote error={fines.error} />
-      {fines.loading ? <Loading /> : fines.data.length === 0 ? <Empty>No {status} fines.</Empty> : (
+      {fines.loading ? <Loading /> : !fines.data ? null : fines.data.length === 0 ? <Empty>No {status} fines.</Empty> : (
         <Panel>
           <table className="w-full text-sm">
             <thead className="text-left text-ink-soft"><tr><th className="py-2">Student</th><th>Book</th><th>Days late</th><th>Amount</th><th>Status</th><th /></tr></thead>
@@ -192,7 +193,7 @@ export function Students() {
     <>
       <PageHeader title="Students" intro="Open a student to see their record and what to suggest next." />
       <ErrorNote error={students.error} />
-      {students.loading ? <Loading /> : (
+      {students.loading ? <Loading /> : !students.data ? null : (
         <Panel>
           <table className="w-full text-sm">
             <thead className="text-left text-ink-soft"><tr><th className="py-2">Name</th><th>Email</th><th>Books out</th><th>Unpaid</th><th>Trust</th></tr></thead>
@@ -231,6 +232,7 @@ export function StudentProfile() {
             {d.suggestions.map((s) => <li key={s} className="rounded-md bg-room-soft px-3 py-2 text-room-deep">{s}</li>)}
           </ul>
           <p className="mt-4 text-sm text-ink-soft">Why the trust score is {d.trust.score}: {d.trust.reasons.join('; ')}.</p>
+          <AiBrief studentId={d.student.id} />
         </Panel>
         <Panel title="Reading profile">
           <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -275,6 +277,32 @@ export function StudentProfile() {
         </Panel>
       </div>
     </>
+  )
+}
+
+function AiBrief({ studentId }) {
+  const [state, setState] = useState({ busy: false, brief: null, model: null, error: null })
+  const write = async () => {
+    setState({ busy: true, brief: null, model: null, error: null })
+    try {
+      const r = await api(`/users/${studentId}/ai-brief`, { method: 'POST' })
+      setState({ busy: false, brief: r.brief, model: r.model, error: null })
+    } catch (e) { setState({ busy: false, brief: null, model: null, error: e.message }) }
+  }
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <Button variant="brass" onClick={write} disabled={state.busy}>
+        {state.busy ? 'Writing brief…' : state.brief ? 'Write a new brief' : 'Write an AI brief'}
+      </Button>
+      <p className="mt-1 text-xs text-ink-soft">Sends this student's record to the AI without their name or email.</p>
+      <ErrorNote error={state.error} />
+      {state.brief && (
+        <div className="mt-3 rounded-md bg-brass-soft px-3 py-2 text-sm leading-relaxed">
+          <RichText text={state.brief} />
+          <p className="mt-2 text-xs text-ink-soft">Written by {state.model}. Check it against the record above.</p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -363,7 +391,7 @@ export function Books() {
       </form>
 
       <ErrorNote error={books.error} />
-      {books.loading ? <Loading /> : (
+      {books.loading ? <Loading /> : !books.data ? null : (
         <Panel>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -404,7 +432,7 @@ export function Activity() {
     <>
       <PageHeader title="Activity log" intro="Every login, loan, return, fine and catalog change, newest first. Nothing is ever deleted." />
       <ErrorNote error={feed.error} />
-      {feed.loading ? <Loading /> : (
+      {feed.loading ? <Loading /> : !feed.data ? null : (
         <Panel>
           <table className="w-full text-sm">
             <thead className="text-left text-ink-soft"><tr><th className="py-2">When</th><th>Who</th><th>What</th><th>Details</th></tr></thead>

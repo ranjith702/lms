@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, fmtDate, fmtDateTime } from '../../api/client'
 import BookCard from '../../components/BookCard'
+import RichText from '../../components/RichText'
 import {
   Button, Empty, ErrorNote, Loading, PageHeader, Panel, StatusPill, TrustBadge, useApi, useToast,
 } from '../../components/ui'
@@ -68,7 +69,7 @@ export function Catalog() {
       </form>
 
       <ErrorNote error={books.error} />
-      {books.loading ? <Loading label="Fetching the shelves" /> : books.data?.length === 0 ? (
+      {books.loading ? <Loading label="Fetching the shelves" /> : !books.data ? null : books.data?.length === 0 ? (
         <Empty>No books match “{query}”. Try a broader word, or ask on the For you page.</Empty>
       ) : (
         <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -102,7 +103,7 @@ export function MyBooks() {
     <>
       <PageHeader title="My books" intro="Books you have now, requests waiting for the librarian, and everything you've read." />
       <ErrorNote error={loans.error} />
-      {loans.loading ? <Loading /> : (
+      {loans.loading ? <Loading /> : !loans.data ? null : (
         <div className="flex flex-col gap-6">
           <Panel title={`On loan (${current.length})`}>
             {current.length === 0 ? <Empty>You have no books out. <Link to="/" className="font-semibold text-room">Browse the catalog</Link></Empty> : (
@@ -162,7 +163,8 @@ export function MyBooks() {
 
 // ---------------- For you: recommendations + assistant ----------------
 const SECTIONS = [
-  ['similar', 'Similar to what you read'],
+  ['close_in_meaning', 'Close in meaning to what you read'],
+  ['similar', 'Similar themes or author'],
   ['same_topic', 'More on the same topic'],
   ['also_borrowed', 'Readers like you also borrowed'],
   ['different', 'Try something different'],
@@ -177,7 +179,7 @@ export function ForYou() {
       <PageHeader title="For you" intro="Picks based on the books you've borrowed. Each one says why it was suggested." />
       <Assistant onBorrow={borrow} />
       <ErrorNote error={recs.error} />
-      {recs.loading ? <Loading label="Finding books for you" /> : SECTIONS.map(([key, title]) =>
+      {recs.loading ? <Loading label="Finding books for you" /> : !recs.data ? null : SECTIONS.map(([key, title]) =>
         recs.data?.[key]?.length ? (
           <section key={key} className="mt-10">
             <h2 className="mb-4 text-xl font-semibold">{title}</h2>
@@ -214,18 +216,40 @@ export function Assistant({ onBorrow, title = 'Ask the library' }) {
         <Button disabled={busy}>{busy ? 'Searching…' : 'Ask'}</Button>
       </form>
       <ErrorNote error={error} />
-      {result && (
-        <div className="mt-4">
-          <p className="max-w-3xl leading-relaxed">{result.answer}</p>
-          {result.books.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-              {result.books.map((b) => <BookCard key={b.id} book={b} onBorrow={onBorrow} />)}
-            </div>
-          )}
-          <p className="mt-3 text-xs text-ink-soft">Answers come from searching book titles, descriptions and topics. AI-written answers can be switched on later.</p>
+      {result && <AssistantResult result={result} onBorrow={onBorrow} />}
+    </Panel>
+  )
+}
+
+const MODEL_NAMES = { 'anthropic/claude-haiku-4.5': 'Claude Haiku 4.5', none: 'catalog search (no AI)' }
+const FOUND_BY = { semantic: 'meaning', keyword: 'words' }
+
+function AssistantResult({ result, onBorrow }) {
+  const recommended = result.books.filter((b) => result.recommended.includes(b.id))
+  const others = result.books.filter((b) => !result.recommended.includes(b.id))
+  const reason = (b) => `Matched by ${(result.found_by[b.id] || []).map((s) => FOUND_BY[s] || s).join(' + ')}`
+  const grid = 'grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
+  return (
+    <div className="mt-4">
+      <RichText text={result.answer} className="max-w-3xl leading-relaxed" />
+      <p className="mt-2 text-xs text-ink-soft">
+        Answered by {MODEL_NAMES[result.provider] || result.provider} · searched by {result.retrieval === 'hybrid' ? 'meaning and words' : 'words'}
+      </p>
+      {result.error && <p className="mt-2 text-xs text-[#7a5a17]">The AI service had a problem, so this answer uses catalog search only.</p>}
+      {recommended.length > 0 && (
+        <div className={`mt-4 ${grid}`}>
+          {recommended.map((b) => <BookCard key={b.id} book={b} onBorrow={onBorrow} reason={reason(b)} />)}
         </div>
       )}
-    </Panel>
+      {others.length > 0 && (
+        <details className="mt-6" open={recommended.length === 0}>
+          <summary className="cursor-pointer text-sm font-semibold text-room">Other matches ({others.length})</summary>
+          <div className={`mt-4 ${grid}`}>
+            {others.map((b) => <BookCard key={b.id} book={b} onBorrow={onBorrow} reason={reason(b)} />)}
+          </div>
+        </details>
+      )}
+    </div>
   )
 }
 
@@ -238,7 +262,7 @@ export function MyFines() {
     <>
       <PageHeader title="Fines" intro="A fine is added for each day a book comes back late. Pay at the library desk; the librarian marks it paid here." />
       <ErrorNote error={fines.error} />
-      {fines.loading ? <Loading /> : (
+      {fines.loading ? <Loading /> : !fines.data ? null : (
         <>
           <p className={`mb-4 font-book text-2xl font-semibold ${total ? 'text-stamp' : 'text-room'}`}>
             {total ? `Rs ${total} unpaid` : 'Nothing to pay'}
@@ -279,7 +303,8 @@ export function History() {
       <PageHeader title="History" intro="Every login, logout and library action is saved, so it's still here the next time you open the app." />
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Logins">
-          {sessions.loading ? <Loading /> : (
+          <ErrorNote error={sessions.error} />
+          {sessions.loading ? <Loading /> : !sessions.data ? null : (
             <table className="w-full text-sm">
               <thead className="text-left text-ink-soft"><tr><th className="py-2">Logged in</th><th>Logged out</th></tr></thead>
               <tbody className="divide-y divide-line">
@@ -292,7 +317,8 @@ export function History() {
           )}
         </Panel>
         <Panel title="Activity">
-          {activity.loading ? <Loading /> : (
+          <ErrorNote error={activity.error} />
+          {activity.loading ? <Loading /> : !activity.data ? null : (
             <ul className="divide-y divide-line text-sm">
               {activity.data?.map((a) => (
                 <li key={a.id} className="flex justify-between gap-4 py-2">

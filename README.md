@@ -18,13 +18,15 @@ React frontend, FastAPI (Python) backend, PostgreSQL database in Docker.
   From 40 to 69 the request goes to the librarian. Below 40, borrowing is blocked until you pay fines or return overdue books.
 - My books (on loan, waiting for approval, reading history), fines, and a full login/logout and activity history.
 - **For you:** recommendations by same topic, similar themes or author, "readers like you also borrowed", and "try something different".
-- **Ask the library:** describe what you want ("a book about space survival") and get matching books.
+- **Ask the library (RAG):** describe what you want ("a whodunit on a snowed-in train") and Claude answers using
+  only books the library owns, found by meaning *and* by words.
 
 **Librarian**
 - Desk: books out, waiting requests, overdue loans, unpaid fines, and students who need a look.
 - Approve or reject requests (each one shows the student's trust score).
 - Mark books returned (late returns create a fine automatically), mark fines paid or waived.
-- A student profile that explains their record, suggests what to do next, and suggests books for them.
+- A student profile that explains their record, suggests what to do next, and suggests books for them,
+  plus an **AI brief** written by Claude (the student's name and email are never sent to the AI).
 - Add, edit and delete books and categories. A full activity log.
 
 **Everything is saved in PostgreSQL**: close the app, restart the database, log in again, and your loans,
@@ -56,6 +58,25 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
+### Turn on the AI (optional)
+
+Without this the app works fully, using keyword search and templated answers.
+
+```bash
+# in .env
+LMS_AI_PROVIDER=openrouter
+LMS_OPENROUTER_API_KEY=sk-or-...           # your key from https://openrouter.ai/keys (never commit it)
+LMS_OPENROUTER_MODEL=anthropic/claude-haiku-4.5
+LMS_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
+
+# then, from backend/
+.venv/Scripts/python -m scripts.embed_books      # embeds the catalog (re-run any time; skips unchanged books)
+.venv/Scripts/python -m scripts.test_rag_live    # live check of RAG + suggestions (a few cents of Claude usage)
+# restart uvicorn so it reads the new .env
+```
+
+Database note: the Postgres image is `pgvector/pgvector:pg16` (Postgres 16 + the vector extension).
+
 ### Demo logins
 
 | Email | Password | Story |
@@ -72,12 +93,13 @@ The login page has buttons that fill these in.
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest -q              # 32 tests: rules, race conditions, API, permissions
+.venv/Scripts/python -m pytest -q              # 44 tests, offline (fake AI): rules, races, API, permissions, RAG
 .venv/Scripts/python -m scripts.smoke_api      # 35 live HTTP checks against the running server
 cd ../frontend && npm run build && npm run lint
 ```
 
-Last results (2026-10-07): pytest **32 passed**; smoke **35/35**; build clean; lint clean apart from React
+Last results (2026-10-07): pytest **44 passed**; smoke **35/35**; live RAG test **10/10**
+(Nemotron embeddings + Claude Haiku 4.5, report in `test_results/rag/`); build clean; lint clean apart from React
 fast-refresh hints. Browser walkthrough screenshots are saved locally in `test_results/ui/` (not committed).
 After `docker compose restart db`, row counts were identical (15 sessions, 16 loans, 50 activity rows)
 and the smoke test still passed.
@@ -98,9 +120,10 @@ library-m-system/
       core/security.py     bcrypt, JWT, session check, role guards
       routers/             HTTP only: auth, catalog, loans (+fines), people (insights, recs, assistant, activity)
       services/            business rules: trust, loans, fines, recommendations, insights, assistant
-      ai/provider.py       pluggable AI layer (none today, OpenRouter later)
+      ai/provider.py       pluggable AI layer: Embedder + AIProvider (none | openrouter)
     alembic/               versioned database migrations
     scripts/seed.py        demo data       scripts/smoke_api.py  live API check
+    scripts/embed_books.py compute embeddings   scripts/test_rag_live.py  live RAG evaluation
     tests/                 pytest (runs against lms_test, never your real data)
   frontend/
     src/api/client.js      one fetch wrapper: JWT, errors, auto-logout on 401
@@ -114,6 +137,6 @@ library-m-system/
 
 ## Next steps (not built yet)
 
-- Turn on AI answers: add `app/ai/openrouter.py` and set `LMS_AI_PROVIDER=openrouter` (see `app/ai/provider.py`).
-- Semantic search: pgvector + embeddings in place of keyword search (phase 2 of the assistant).
+- Cache question embeddings, and add rate limiting on `/assistant/ask` and `/ai-brief` (each call costs money).
+- Switch embeddings to `halfvec` + an HNSW index once the catalog grows past ~10k books.
 - Email/SMS due-date reminders; book reservations; book cover images.

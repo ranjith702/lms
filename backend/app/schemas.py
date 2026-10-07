@@ -140,6 +140,7 @@ class RecItem(BaseModel):
 
 
 class RecommendationsOut(BaseModel):
+    close_in_meaning: list[RecItem] = []
     same_topic: list[RecItem]
     similar: list[RecItem]
     also_borrowed: list[RecItem]
@@ -187,7 +188,16 @@ class AskIn(BaseModel):
 class AskOut(BaseModel):
     answer: str
     books: list[BookOut]
-    provider: str
+    provider: str                       # model that wrote the answer, or "none"
+    retrieval: str                      # "hybrid" (semantic + keyword) or "keyword"
+    found_by: dict[str, list[str]]      # book id -> ["semantic", "keyword"]
+    recommended: list[int] = []         # ids of books the answer actually names (shown first)
+    error: str | None = None            # set when the AI service failed and we fell back
+
+
+class BriefOut(BaseModel):
+    brief: str
+    model: str
 
 
 class ActivityOut(ORM):

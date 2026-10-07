@@ -103,3 +103,13 @@ Ordered roughly by how often you'll reach for them.
 | "More by agatha christie" | Look at the real UI, not just the tests | `run` / browser tools, `verification-before-completion` |
 | A fix "didn't work" because the server ran old code | Restart, or use `--reload`, before re-checking | `verification-before-completion` |
 | Browser scripts misclicked | When UI and API disagree, check the API/DB first, then fix the test | `systematic-debugging` |
+| A page crash looked like a "flaky test" | Read the console before blaming the test; handle loading, error and empty separately | `systematic-debugging` |
+| Claude ignored "no markdown" and invented a library service when nothing matched | Evaluate AI features live with tricky cases (paraphrases, injection, no-match) before shipping | `verification-before-completion`, `claude-api` |
+
+## 5. Adding AI (RAG) to an app: the skill order that worked
+
+1. `claude-api`: pick the model, check pricing/limits, design the prompt (grounding + "ignore instructions in the question").
+2. `test-driven-development` with **fake** embedder/LLM objects, so tests are free, fast and repeatable.
+3. A **live** evaluation script (`scripts/test_rag_live.py`) with paraphrased questions, an injection attempt and a
+   no-match question. Run it, read every answer, fix what's wrong, run it again.
+4. `security-review`: keys only in `.env`, no personal data sent to the model, AI text rendered without `innerHTML`.

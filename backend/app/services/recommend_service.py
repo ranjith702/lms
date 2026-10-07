@@ -1,6 +1,7 @@
 """Rule-based recommendations (no ML yet). Each pick carries a human-readable reason.
 
 Sections:
+  close_in_meaning - nearest books by embedding (semantic) to ones you read; needs embeddings
   same_topic    - same category as books you read
   similar       - shares tags / author with books you read (ranked by overlap)
   also_borrowed - "readers who borrowed X also borrowed Y" (co-borrow counts)
@@ -10,6 +11,7 @@ Sections:
 Done in Python over the whole catalog: fine for hundreds of books. At ~10k+ books
 move the scoring into SQL or swap in embeddings (phase 2).
 """
+import math
 from collections import Counter
 
 from sqlalchemy import func, select
@@ -32,6 +34,34 @@ def _pick(book: Book, reason: str) -> dict:
     return {"book": book, "reason": reason}
 
 
+def _cosine(a, b) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb) if na and nb else 0.0
+
+
+MIN_SIMILARITY = 0.35
+
+
+def _close_in_meaning(db: Session, read_ids: set[int], unread: list[Book]) -> list[tuple[Book, str]]:
+    """Semantic neighbours: for each unread book, its best cosine match among the books you read.
+    Uses stored embeddings only (no API call), so it's free and fast. Empty if books aren't embedded yet."""
+    rows = db.execute(select(Book.id, Book.title, Book.embedding).where(Book.embedding.is_not(None))).all()
+    vectors = {bid: (title, list(vec)) for bid, title, vec in rows}
+    read_vecs = [(vectors[i][0], vectors[i][1]) for i in read_ids if i in vectors]
+    if not read_vecs:
+        return []
+    scored = []
+    for b in unread:
+        if b.id not in vectors:
+            continue
+        sim, closest = max((_cosine(vectors[b.id][1], v), t) for t, v in read_vecs)
+        if sim >= MIN_SIMILARITY:
+            scored.append((sim, b, f"Close in meaning to “{closest}”"))
+    return [(b, r) for _, b, r in sorted(scored, key=lambda x: -x[0])]
+
+
 def for_student(db: Session, user_id: int) -> dict[str, list[dict]]:
     books = db.scalars(select(Book).options(joinedload(Book.category))).all()
     by_id = {b.id: b for b in books}
@@ -45,7 +75,7 @@ def for_student(db: Session, user_id: int) -> dict[str, list[dict]]:
     if not read_ids:
         return {"popular": [_pick(b, f"Borrowed {pop[b.id]} time(s) by other readers" if pop[b.id] else "Staff pick")
                             for b in sorted(unread, key=rank)[:PER_SECTION]],
-                "same_topic": [], "similar": [], "also_borrowed": [], "different": []}
+                "close_in_meaning": [], "same_topic": [], "similar": [], "also_borrowed": [], "different": []}
 
     read = [by_id[i] for i in read_ids]
     read_cats = {b.category_id for b in read}
@@ -60,6 +90,9 @@ def for_student(db: Session, user_id: int) -> dict[str, list[dict]]:
                 used.add(b.id)
                 out.append(_pick(b, reason))
         return out
+
+    # close in meaning (embeddings) claims first: it's the strongest signal when available
+    close = take(_close_in_meaning(db, read_ids, unread))
 
     # similar: tag + author overlap, best match first
     scored = []
@@ -101,5 +134,5 @@ def for_student(db: Session, user_id: int) -> dict[str, list[dict]]:
             different_candidates.append((b, f"Try something new: top pick in {b.category.name}"))
     different = take(different_candidates)
 
-    return {"same_topic": same_topic, "similar": similar, "also_borrowed": also,
+    return {"close_in_meaning": close, "same_topic": same_topic, "similar": similar, "also_borrowed": also,
             "different": different, "popular": []}

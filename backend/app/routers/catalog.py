@@ -9,7 +9,9 @@ from app.core.security import get_current_user, require_librarian
 from app.db import get_db
 from app.models import Book, Category, Loan, User
 from app.routers._convert import book_out
+from app.ai.provider import get_embedder
 from app.services import activity
+from app.services.embedding_service import embed_after_change
 
 router = APIRouter(tags=["catalog"])
 
@@ -88,6 +90,7 @@ def create_book(body: schemas.BookIn, db: Session = Depends(get_db), lib: User =
         raise HTTPException(409, "A book with this ISBN already exists")
     activity.log(db, lib.id, "book.created", "book", book.id, title=book.title)
     db.commit()
+    embed_after_change(db, get_embedder(), book.id)   # best effort; never blocks saving the book
     return book_out(_get_book(db, book.id))
 
 
@@ -108,6 +111,7 @@ def update_book(book_id: int, body: schemas.BookIn, db: Session = Depends(get_db
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "A book with this ISBN already exists")
+    embed_after_change(db, get_embedder(), book_id)
     return book_out(_get_book(db, book_id))
 
 

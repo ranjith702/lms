@@ -10,7 +10,8 @@ from app.core.security import get_current_user, require_librarian
 from app.db import get_db
 from app.models import Activity, Book, Fine, Loan, User, UserSession
 from app.routers._convert import book_out, fine_out, loan_out, rec_items, trust_out
-from app.services import assistant_service, insights_service, recommend_service, trust_service
+from app.ai.provider import AIError, get_provider
+from app.services import activity, assistant_service, insights_service, recommend_service, trust_service
 
 router = APIRouter(tags=["people & insights"])
 
@@ -69,9 +70,24 @@ def my_recommendations(db: Session = Depends(get_db), user: User = Depends(get_c
 
 @router.post("/assistant/ask", response_model=schemas.AskOut)
 def ask(body: schemas.AskIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    result = assistant_service.ask(db, user, body.question)
-    return schemas.AskOut(answer=result["answer"], books=[book_out(b) for b in result["books"]],
-                          provider=result["provider"])
+    r = assistant_service.ask(db, user, body.question)
+    return schemas.AskOut(answer=r["answer"], books=[book_out(b) for b in r["books"]], provider=r["provider"],
+                          retrieval=r["retrieval"], found_by={str(k): v for k, v in r["found_by"].items()},
+                          recommended=r["recommended"], error=r["error"])
+
+
+@router.post("/users/{user_id}/ai-brief", response_model=schemas.BriefOut)
+def ai_brief(user_id: int, db: Session = Depends(get_db), lib: User = Depends(require_librarian)):
+    student = db.get(User, user_id)
+    if student is None or student.role != "student":
+        raise HTTPException(404, "Student not found")
+    try:
+        brief, model = insights_service.ai_brief(db, user_id, get_provider())
+    except AIError as e:
+        raise HTTPException(503, f"AI brief unavailable: {e}")
+    activity.log(db, lib.id, "assistant.brief", "user", user_id, model=model)
+    db.commit()
+    return schemas.BriefOut(brief=brief, model=model)
 
 
 def _activity(db: Session, stmt) -> list[schemas.ActivityOut]:

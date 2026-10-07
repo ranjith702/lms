@@ -8,10 +8,13 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint, Computed, DateTime, ForeignKey, Index, Integer, String, Text, func,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+EMBEDDING_DIM = 2048  # nvidia/nemotron-3-embed-1b output size (must match migration 002)
 
 
 class User(Base):
@@ -54,6 +57,11 @@ class Book(Base):
             persisted=True,
         ),
     )
+    # Semantic search (RAG): vector of the book's text, which model made it, and a hash of the text,
+    # so we only re-embed when title/description/tags actually change.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True, deferred=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(120))
+    embedding_hash: Mapped[str | None] = mapped_column(String(64))
     category: Mapped[Category] = relationship()
     __table_args__ = (
         CheckConstraint("available_copies >= 0", name="ck_books_available_nonneg"),

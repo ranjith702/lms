@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    # Postgres 16 + pgvector extension (stores book embeddings for semantic search / RAG)
+    image: pgvector/pgvector:pg16
     container_name: lms-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lms}
@@ -12,7 +13,7 @@ services:
       # Host port 5433 avoids clashing with any other local Postgres on 5432.
       - "127.0.0.1:5433:5432"
     volumes:
-      - lms_pgdata:/var/lib/postgresql/data   # named volume: data survives restarts
+      - lms_pgdata_v2:/var/lib/postgresql/data   # named volume: data survives restarts (v2 = pgvector image)
       - ./db/init:/docker-entrypoint-initdb.d  # creates the test database on first boot
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lms}"]
@@ -20,4 +21,4 @@ services:
       retries: 10
 
 volumes:
-  lms_pgdata:
+  lms_pgdata_v2:

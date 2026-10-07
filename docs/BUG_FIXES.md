@@ -14,6 +14,8 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 | LMS-BUG-007 | 2026-10-07 | Docker / DB exposure | medium | fixed |
 | LMS-BUG-008 | 2026-10-07 | Seed data (book title) | low | fixed |
 | LMS-BUG-009 | 2026-10-07 | Recommendation reason text | low | fixed |
+| LMS-BUG-010 | 2026-10-07 | Frontend crash when an API call fails | **high** | fixed |
+| LMS-BUG-011 | 2026-10-07 | AI answer quality (markdown, noise, invented services) | medium | fixed |
 
 ---
 
@@ -96,6 +98,31 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 - **Extra lesson:** after the fix, the browser *still* showed lowercase because the API server was started
   without `--reload` and was running the old code. Always restart (or use `--reload`) before re-checking a fix.
 
+## LMS-BUG-010 — Pages crashed when an API call failed (high)
+- **Error (browser console):** `TypeError: Cannot read properties of null (reading 'books') at Desk`
+- **How found:** while debugging browser tests, I read the console log instead of assuming the test was wrong.
+- **Root cause:** pages rendered `loading ? <Loading/> : <use data>`. When a request *failed* (e.g. a session that
+  expired mid-visit returns 401), `loading` is false **and** `data` is null, so the page dereferenced null.
+  With no error boundary, React tore down the whole app. The same pattern was in 13 places.
+- **Fix:** every one now renders `loading ? <Loading/> : !data ? null : ...` (the page's error message explains what
+  happened), and an app-wide `ErrorBoundary` shows a recovery screen for any future render crash.
+- **Verified:** logged in as the librarian, revoked the session server-side, opened the Desk, and it went back to the
+  login page with 0 page errors and no crash screen.
+- **Lesson:** "not loading" doesn't mean "has data". Handle loading, error and empty states separately.
+
+## LMS-BUG-011 — First live RAG run exposed answer-quality problems
+- **How found:** `python -m scripts.test_rag_live` against the real models (Nemotron embeddings + Claude Haiku 4.5).
+- **Problems → fixes:**
+  1. Claude used markdown (`**bold**`) despite "plain text" in the prompt → the prompt now *allows* only `**title**`
+     and `- ` bullets, and `RichText.jsx` renders exactly those as React elements (never `innerHTML`).
+  2. Keyword search added noise (*Frankenstein* for "stranded astronaut") → the books the answer names come first;
+     the rest sit under "Other matches".
+  3. With **0** books retrieved, Claude invented an "interlibrary loan" service → when nothing is retrieved the LLM is
+     not called at all (also saves cost), and the prompt forbids promising library services.
+  4. My injection check was wrong: it flagged an answer that *refused* the fake book → it now checks for prompt
+     leaks and for actually recommending a non-catalog book.
+- **Result:** live test 10/10 PASS (`test_results/rag/`).
+
 ---
 
 ## Testing notes (not app bugs, but worth knowing)
@@ -105,5 +132,8 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
   (3) `networkidle` is unreliable with the Vite dev server, so wait for a real element instead;
   (4) aborted scripts kept driving the same tab. The `sessions` table showed an extra login I hadn't made.
   The app itself behaved correctly every time I checked by hand.
+- **Mouse clicks stopped reaching the page** (Playwright MCP, later in a long session): a capture listener saw
+  *zero* events, while a DOM `element.click()` navigated correctly and only one tab existed. It's a tool issue,
+  not the app. Workaround: `locator.dispatchEvent('click')` + `press('Enter')`. Debugging it is what surfaced LMS-BUG-010.
 - **"Page wider than the screen":** a full-page screenshot was 1846px wide, but `scrollWidth == clientWidth`
   showed no overflow. The test browser window was simply larger than the requested viewport.

@@ -95,3 +95,25 @@ SELECT v.* FROM (VALUES
 ) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
        always_load, active, source_file)
 WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);
+
+INSERT INTO learnings (learning_id, category, title, content, summary, tags, applies_to, source,
+                       project, scope, priority, always_load, active, source_file)
+SELECT v.* FROM (VALUES
+  ('LMS-BUG-010-NOT-LOADING-NOT-DATA', 'bug-pattern',
+   'React pages crash when an API call fails: "not loading" is not "has data"',
+   $doc$Error: TypeError: Cannot read properties of null (reading 'books') at Desk; with no error boundary React unmounted the whole app.
+Root cause: pages rendered loading ? <Loading/> : <use data>. A failed request (e.g. a 401 after a mid-session revoke) leaves loading=false AND data=null. The same pattern was in 13 places.
+Fix: loading ? <Loading/> : !data ? null : ..., plus an app-wide ErrorBoundary. Verified by revoking the session server-side mid-visit: clean redirect to login, 0 page errors.
+Found by reading the browser console log while debugging a "flaky" Playwright test, not by assuming the test was at fault.$doc$,
+   'Guard loading / error / empty separately; add an ErrorBoundary; read the console before blaming the test',
+   ARRAY['library-m-system','react','error-handling','frontend'], ARRAY['global','react'], 'claude-code-session',
+   'library-m-system', 'global', 'high', false, true, 'frontend/src/pages'),
+  ('LMS-RAG-LIVE-EVAL-FINDINGS', 'tool-pattern',
+   'Live RAG eval: skip the LLM on zero retrieval; allow minimal markdown; rank named books first',
+   $doc$First live run (Nemotron-embed-1b + Claude Haiku 4.5 via OpenRouter) found: (1) the model ignores "no markdown", so allow **bold**/bullets and render them safely as React elements; (2) keyword hits add noise, so put books the answer names first; (3) zero retrieved books led the LLM to invent a library service, so skip the LLM entirely when nothing is retrieved (also saves cost); (4) an injection test must not flag answers that mention a fake title only to refuse it. Hybrid retrieval (pgvector cosine + Postgres FTS fused with RRF k=60) found semantic-only matches (Atomic Habits for "stop procrastinating") that keywords missed. Nemotron returns 2048 dims, above pgvector's 2000-dim index limit; an exact scan is fine at small scale, otherwise use halfvec + HNSW.$doc$,
+   'Evaluate RAG live with paraphrased questions + injection + no-match cases before shipping',
+   ARRAY['library-m-system','rag','pgvector','openrouter','claude','evaluation'], ARRAY['global','ai'],
+   'claude-code-session', 'library-m-system', 'global', 'high', false, true, 'backend/scripts/test_rag_live.py')
+) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
+       always_load, active, source_file)
+WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);

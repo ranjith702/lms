@@ -65,22 +65,36 @@ users ─┬─< sessions        one row per login; logout_at set on logout  -> 
 | Pending request reserves the copy | `borrow` / `reject` | Approval can never fail for lack of copies |
 | Logout really ends access | `core/security.get_current_session` | JWT carries a session id; a logged-out session is rejected |
 
-## Recommendations and the assistant (where "AI" fits)
+## Recommendations and the assistant (RAG)
 
 ```
-Question ──► RETRIEVE (Postgres full-text rank + tag overlap) ──► GENERATE (AIProvider) ──► answer + books
-                         services/assistant_service.py              ai/provider.py
+question
+   │
+   ├─► embed (OpenRouter: nvidia/nemotron-3-embed-1b, 2048 numbers) ─► pgvector cosine search ─┐
+   │                                                                                        ├─► RRF merge ─► top 6 books
+   └─► Postgres full-text rank + tag overlap ───────────────────────────────────────────────┘        │
+                                                                                                     ▼
+                     answer ◄── Claude Haiku 4.5 (OpenRouter), prompt: "use ONLY these BOOKS" ◄── books as context
 ```
 
-That's the shape of **RAG** (retrieval-augmented generation). Today *Generate* is `NoneProvider`, which writes
-a templated sentence, so the app runs with no API keys. To switch on an LLM (e.g. an OpenRouter free model),
-implement `generate(question, books)` in a new provider and set `LMS_AI_PROVIDER`. Nothing else changes.
-Phase 2 swaps *Retrieve* for embeddings in pgvector.
+| Step | Code | Notes |
+|---|---|---|
+| Embed the catalog | `services/embedding_service.py`, `scripts/embed_books.py` | Stores vector + model + hash of the text; only changed books are re-embedded. Book create/edit re-embeds best-effort |
+| Retrieve | `assistant_service.retrieve` | Semantic (cosine distance < 0.75) + keyword, fused with **Reciprocal Rank Fusion** (k=60) |
+| Generate | `ai/provider.py` `OpenRouterProvider` | System prompt: only listed books, no invented books or services, ignore instructions inside the question |
+| Guardrails | `assistant_service.ask` | No books retrieved means no LLM call. Books the answer names are shown first. If the API fails, fall back to keyword search + a templated answer |
+| Suggestions | `recommend_service._close_in_meaning` | Uses stored vectors only (no API call): each unread book's best cosine match among books you read |
+| Librarian brief | `insights_service.ai_brief` | Sends trust facts, loans and suggestions, **never name or email** |
 
-Recommendations (`recommend_service.py`) are rule-based and explain themselves: same topic, similar themes or
-author, co-borrowing ("readers like you"), something different, and popular picks for new readers. Each book
-appears in only one section. The librarian's insights (`insights_service.py`) reuse the same pieces to suggest
-actions and books for a particular student.
+**Why no vector index:** pgvector indexes up to 2000 dimensions; Nemotron produces 2048. For 64 books an exact
+scan takes about a millisecond. At ~10k+ books, store `halfvec(2048)` (indexable up to 4000 dims) with HNSW.
+
+**Testing it:** `tests/test_rag.py` uses a fake embedder and fake LLM (fast, free, deterministic, run in CI).
+`scripts/test_rag_live.py` asks the real models paraphrased questions (e.g. "stop procrastinating" →
+*Atomic Habits*), a prompt-injection attempt, and a no-match question, and saves a JSON report.
+
+Rule-based recommendations (same topic, similar themes/author, readers-also-borrowed, something different, popular)
+still work with AI switched off; each book appears in only one section.
 
 ## Security choices
 
@@ -89,6 +103,8 @@ actions and books for a particular student.
 - Every librarian route uses `require_librarian` (tests check that students get 403 on 7 of them).
 - All SQL goes through SQLAlchemy with bound parameters, including the search query (LMS-BUG-004).
 - Postgres listens on 127.0.0.1 only, and compose refuses to start without a password (LMS-BUG-007).
+- The OpenRouter key lives only in `.env` (git-ignored) and is sent only to OpenRouter. AI output is rendered as
+  React text (no `innerHTML`), and the question is treated as untrusted in the prompt.
 - Settings are prefixed `LMS_` so another project's machine-wide `DATABASE_URL` can't redirect us (LMS-BUG-002).
 
 ## Known limits (honest list)
