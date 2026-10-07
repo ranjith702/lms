@@ -4,10 +4,13 @@ services:
     container_name: lms-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lms_dev_password}
+      # No fallback: compose refuses to start unless .env sets a password (LMS-BUG-007).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-lms}
     ports:
-      - "5433:5432"   # host 5433 -> avoids clashing with any local Postgres on 5432
+      # 127.0.0.1 = reachable only from this laptop, not the Wi-Fi network.
+      # Host port 5433 avoids clashing with any other local Postgres on 5432.
+      - "127.0.0.1:5433:5432"
     volumes:
       - lms_pgdata:/var/lib/postgresql/data   # named volume: data survives restarts
       - ./db/init:/docker-entrypoint-initdb.d  # creates the test database on first boot

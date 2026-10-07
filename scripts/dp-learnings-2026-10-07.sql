@@ -43,3 +43,36 @@ Rule: on a red test, decide first whether the code or the expectation is wrong.$
 ) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
        always_load, active, source_file)
 WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);
+
+-- Added after the security review of commit bc8f2a1
+INSERT INTO learnings (learning_id, category, title, content, summary, tags, applies_to, source,
+                       project, scope, priority, always_load, active, source_file)
+SELECT v.* FROM (VALUES
+  ('LMS-BUG-006-PER-USER-LIMIT-RACE', 'bug-pattern',
+   'Per-user limit check (count then insert) is bypassable by parallel requests',
+   $doc$Error: test fired 8 parallel borrow requests from one student, and 8 loans were created despite MAX_ACTIVE_LOANS=3.
+Root cause: check-then-act race. Each transaction counted active loans before the others committed. An atomic UPDATE on the book row protects copies of one book, not a user's total.
+Fix: SELECT users.id ... FOR UPDATE at the start of borrow(), which serializes one user's requests while other users stay parallel. Verified by a ThreadPoolExecutor test on repeated runs.
+Found by: automated commit security review.$doc$,
+   'Lock the counted-owner row (SELECT FOR UPDATE) before count-then-insert limit checks',
+   ARRAY['library-m-system','race-condition','postgres','concurrency','security'],
+   ARRAY['global','backend'], 'claude-code-session', 'library-m-system', 'global', 'high', false, true,
+   'backend/app/services/loan_service.py'),
+  ('LMS-BUG-007-COMPOSE-DB-EXPOSED', 'bug-pattern',
+   'docker-compose Postgres published on 0.0.0.0 with fallback password',
+   $doc$Issue: ports "5433:5432" binds all interfaces, and ${POSTGRES_PASSWORD:-default} gives a known password.
+Fix: "127.0.0.1:5433:5432" plus ${POSTGRES_PASSWORD:?Set in .env}, so compose refuses to start without a password.
+Found by: automated commit security review.$doc$,
+   'Bind dev DB ports to 127.0.0.1 and use :? (required) instead of :- (default) for secrets',
+   ARRAY['library-m-system','docker','security','postgres'],
+   ARRAY['global','docker'], 'claude-code-session', 'library-m-system', 'global', 'high', false, true,
+   'docker-compose.yml'),
+  ('LMS-BUG-008-SEED-TITLE-TYPO', 'bug-pattern',
+   'Seed data had a misspelled real book title',
+   $doc$"The Godan" corrected to "Godaan" (Premchand). Fixed in seed.py and the live DB with UPDATE ... RETURNING. Rule: proofread real-world facts in demo data.$doc$,
+   'Proofread real-world facts in seed data',
+   ARRAY['library-m-system','seed-data'], ARRAY['project'], 'claude-code-session', 'library-m-system',
+   'project', 'normal', false, true, 'backend/scripts/seed.py')
+) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
+       always_load, active, source_file)
+WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);

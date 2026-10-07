@@ -130,6 +130,27 @@ def test_concurrent_borrow_of_last_copy_issues_it_once(db):
     assert book.available_copies == 0
 
 
+def test_concurrent_borrows_by_one_student_respect_loan_limit(db):
+    """Security review finding: the limit check must not be bypassable by parallel requests."""
+    cat = make_category(db)
+    stu = make_user(db)
+    books = [make_book(db, cat, f"P{i}", copies=3) for i in range(8)]
+
+    def attempt(book_id):
+        s = TestingSession()
+        try:
+            loan_service.borrow(s, s.get(models.User, stu.id), book_id, now=NOW)
+            return "ok"
+        except ServiceError:
+            return "fail"
+        finally:
+            s.close()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(attempt, [b.id for b in books]))
+    assert results.count("ok") == 3  # LMS_MAX_ACTIVE_LOANS
+
+
 # ---------------- approve / reject ----------------
 def test_librarian_approves_and_rejects_pending(db):
     lib, cat = make_user(db, "lib@test.dev", role="librarian"), make_category(db)

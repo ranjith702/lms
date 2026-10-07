@@ -39,6 +39,10 @@ def borrow(db: Session, user: User, book_id: int, now: datetime | None = None) -
     if db.get(Book, book_id) is None:
         raise ServiceError(404, "Book not found")
 
+    # Lock this student's row until commit: parallel borrow requests from the SAME student
+    # queue up here, so the limit/duplicate checks below can't be raced (LMS-BUG-006).
+    db.execute(select(User.id).where(User.id == user.id).with_for_update())
+
     active = db.scalars(select(Loan).where(Loan.user_id == user.id, Loan.status.in_(ACTIVE))).all()
     if any(l.book_id == book_id for l in active):
         raise ServiceError(409, "You already have this book (or a pending request for it)")

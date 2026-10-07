@@ -10,6 +10,9 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 | LMS-BUG-003 | 2026-10-07 | Assistant search | low | fixed |
 | LMS-BUG-004 | 2026-10-07 | Assistant search SQL | medium | fixed |
 | LMS-BUG-005 | 2026-10-07 | Tests (recommendations) | low | fixed |
+| LMS-BUG-006 | 2026-10-07 | Loans (race condition) | **high** | fixed |
+| LMS-BUG-007 | 2026-10-07 | Docker / DB exposure | medium | fixed |
+| LMS-BUG-008 | 2026-10-07 | Seed data (book title) | low | fixed |
 
 ---
 
@@ -57,3 +60,29 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 - **Fix:** the test now asserts there are no duplicates. It uses a fixture book with no shared tags (Odes),
   so only the "also borrowed" rule can find it.
 - **Lesson:** when a test fails, first decide whether the code or the test's expectation is wrong.
+
+## LMS-BUG-006 — One student could exceed the 3-book limit with parallel requests (high)
+- **How found:** automated security review of commit `bc8f2a1` flagged `loan_service.py`; I wrote a test that
+  fires 8 borrow requests for 8 different books from the same student at once.
+- **Error reproduced:** `assert 8 == 3`, so all 8 borrows succeeded.
+- **Root cause:** check-then-act race. Each request counted active loans (0, 1, 2...) before any other request
+  committed, so every one passed the limit check. The atomic copy decrement only protects a single *book*,
+  not one *student's* total.
+- **Fix:** `SELECT ... FROM users WHERE id = :me FOR UPDATE` at the start of `borrow()`. One student's
+  borrow requests now queue up, while different students still borrow in parallel.
+  Test `test_concurrent_borrows_by_one_student_respect_loan_limit` passes on repeated runs.
+- **Lesson:** every "count, then insert" rule needs a lock, or a database constraint, for the thing being counted.
+
+## LMS-BUG-007 — Postgres exposed on all network interfaces with a default password
+- **How found:** same security review (`docker-compose.yml`).
+- **Root cause:** `ports: "5433:5432"` binds `0.0.0.0`, so anyone on the same Wi-Fi could connect.
+  `${POSTGRES_PASSWORD:-lms_dev_password}` meant it also worked with a well-known password.
+- **Fix:** bind `127.0.0.1:5433:5432`. Use `${POSTGRES_PASSWORD:?...}` so compose refuses to start without a
+  password from `.env` (verified: `docker compose config` fails with no password).
+- **Lesson:** publish dev databases on localhost only; never ship a fallback password.
+
+## LMS-BUG-008 — Wrong book title in seed data
+- **How found:** proofreading the seed output.
+- **Root cause:** my typo. Premchand's novel is *Godaan*, not "The Godan".
+- **Fix:** corrected `scripts/seed.py`, and `UPDATE books ... RETURNING` confirmed 1 row changed in the live DB.
+- **Lesson:** proofread real-world facts in seed/demo data; it is user-visible.
