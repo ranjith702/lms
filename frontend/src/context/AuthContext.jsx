@@ -6,13 +6,14 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [previousSession, setPreviousSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // Only "loading" if there is a saved token to check; otherwise show the login page straight away.
+  const [loading, setLoading] = useState(() => !!tokenStore.get())
 
   const clear = useCallback(() => { tokenStore.clear(); setUser(null) }, [])
 
   useEffect(() => {
     setUnauthorizedHandler(clear)
-    if (!tokenStore.get()) { setLoading(false); return }
+    if (!tokenStore.get()) return
     // Re-opening the app: the token is still valid, so restore the user from the server.
     api('/auth/me').then(setUser).catch(clear).finally(() => setLoading(false))
   }, [clear])

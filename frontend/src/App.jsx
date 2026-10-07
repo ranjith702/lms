@@ -21,16 +21,16 @@ export default function App() {
 
   // Role decides which pages exist at all; the API enforces it again server-side.
   const pages = user.role === 'librarian'
-    ? [['/', <L.Desk />], ['/requests', <L.Requests />], ['/loans', <L.Loans />], ['/fines', <L.Fines />],
-      ['/students', <L.Students />], ['/students/:id', <L.StudentProfile />], ['/books', <L.Books />],
-      ['/assistant', <L.LibrarianAssistant />], ['/activity', <L.Activity />]]
-    : [['/', <S.Catalog />], ['/my-books', <S.MyBooks />], ['/for-you', <S.ForYou />], ['/fines', <S.MyFines />],
-      ['/history', <S.History />]]
+    ? [['/', L.Desk], ['/requests', L.Requests], ['/loans', L.Loans], ['/fines', L.Fines],
+      ['/students', L.Students], ['/students/:id', L.StudentProfile], ['/books', L.Books],
+      ['/assistant', L.LibrarianAssistant], ['/activity', L.Activity]]
+    : [['/', S.Catalog], ['/my-books', S.MyBooks], ['/for-you', S.ForYou], ['/fines', S.MyFines],
+      ['/history', S.History]]
 
   return (
     <Routes>
       <Route element={<Layout />}>
-        {pages.map(([path, el]) => <Route key={path} path={path} element={el} />)}
+        {pages.map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
