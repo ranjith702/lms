@@ -72,7 +72,9 @@ def for_student(db: Session, user_id: int) -> dict[str, list[dict]]:
                 why.append(f"more by {b.author}")
             if shared:
                 why.append("shares themes: " + ", ".join(shared[:3]))
-            scored.append((score, b, "; ".join(why).capitalize()))
+            reason = "; ".join(why)
+            # upper-case only the first letter; str.capitalize() would lowercase author names (LMS-BUG-009)
+            scored.append((score, b, reason[:1].upper() + reason[1:]))
     similar = take((b, r) for _, b, r in sorted(scored, key=lambda x: (-x[0], rank(x[1]))))
 
     same_topic = take(

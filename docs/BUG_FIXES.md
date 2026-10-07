@@ -13,6 +13,7 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 | LMS-BUG-006 | 2026-10-07 | Loans (race condition) | **high** | fixed |
 | LMS-BUG-007 | 2026-10-07 | Docker / DB exposure | medium | fixed |
 | LMS-BUG-008 | 2026-10-07 | Seed data (book title) | low | fixed |
+| LMS-BUG-009 | 2026-10-07 | Recommendation reason text | low | fixed |
 
 ---
 
@@ -86,3 +87,23 @@ Also stored in the DevPilot `learnings` table (`project = 'library-m-system'`).
 - **Root cause:** my typo. Premchand's novel is *Godaan*, not "The Godan".
 - **Fix:** corrected `scripts/seed.py`, and `UPDATE books ... RETURNING` confirmed 1 row changed in the live DB.
 - **Lesson:** proofread real-world facts in seed/demo data; it is user-visible.
+
+## LMS-BUG-009 — Author names lowercased in recommendation reasons
+- **Error seen in the UI:** "More by agatha christie" (browser screenshot of a student profile).
+- **Root cause:** Python's `str.capitalize()` upper-cases the first letter **and lowercases all the others**.
+- **Fix:** `reason[:1].upper() + reason[1:]`. Regression test `test_reason_keeps_author_name_casing` failed first, then
+  passed. The live API now returns "More by Isaac Asimov".
+- **Extra lesson:** after the fix, the browser *still* showed lowercase because the API server was started
+  without `--reload` and was running the old code. Always restart (or use `--reload`) before re-checking a fix.
+
+---
+
+## Testing notes (not app bugs, but worth knowing)
+- **Browser-test misclicks:** my Playwright scripts landed on the wrong pages several times. Causes:
+  (1) `getByRole('link', {name: 'Requests'})` matched two links, so use `exact: true` or scope to the nav;
+  (2) clicking before the previous page finished rendering, so wait for the URL with `waitForURL`;
+  (3) `networkidle` is unreliable with the Vite dev server, so wait for a real element instead;
+  (4) aborted scripts kept driving the same tab. The `sessions` table showed an extra login I hadn't made.
+  The app itself behaved correctly every time I checked by hand.
+- **"Page wider than the screen":** a full-page screenshot was 1846px wide, but `scrollWidth == clientWidth`
+  showed no overflow. The test browser window was simply larger than the requested viewport.

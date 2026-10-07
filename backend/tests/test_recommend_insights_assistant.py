@@ -45,6 +45,16 @@ def test_recommendations_cover_same_topic_similar_also_borrowed_and_different(db
     assert all(r["reason"] for k in recs for r in recs[k])
 
 
+def test_reason_keeps_author_name_casing(db):
+    """LMS-BUG-009: str.capitalize() lowercased 'Asimov' to 'asimov'."""
+    books = _library(db)
+    stu = make_user(db)
+    make_past_loan(db, stu, books["found"])
+    recs = recommend_service.for_student(db, stu.id)
+    robot = next(r for r in recs["similar"] if r["book"].title == "I, Robot")
+    assert robot["reason"].startswith("More by Asimov")
+
+
 def test_librarian_insights_explain_the_student(db):
     books = _library(db)
     stu = make_user(db)

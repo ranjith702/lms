@@ -76,3 +76,22 @@ Found by: automated commit security review.$doc$,
 ) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
        always_load, active, source_file)
 WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);
+
+INSERT INTO learnings (learning_id, category, title, content, summary, tags, applies_to, source,
+                       project, scope, priority, always_load, active, source_file)
+SELECT v.* FROM (VALUES
+  ('LMS-BUG-009-PY-CAPITALIZE-LOWERS', 'bug-pattern',
+   'Python str.capitalize() lowercases the rest of the string (mangles names)',
+   $doc$UI showed "More by agatha christie". str.capitalize() upper-cases the first char AND lowercases all others. Fix: s[:1].upper() + s[1:]. Also: re-verifying a fix in the browser showed the old output because uvicorn ran without --reload, so restart before re-checking.$doc$,
+   'Use s[:1].upper()+s[1:], not capitalize(), on text containing names',
+   ARRAY['library-m-system','python','strings'], ARRAY['global','python'], 'claude-code-session',
+   'library-m-system', 'global', 'normal', false, true, 'backend/app/services/recommend_service.py'),
+  ('LMS-TEST-PLAYWRIGHT-FLAKE-CAUSES', 'tool-pattern',
+   'Playwright misclicks: ambiguous locators, no waitForURL, networkidle under Vite, orphan scripts',
+   $doc$Symptoms: clicks landed on the wrong nav pages and row counts read 0 while data existed. Causes: getByRole name matched 2 links (use exact:true / scope to navigation); clicking before the route re-rendered (use waitForURL); networkidle is unreliable with the Vite dev server (wait for a concrete element); aborted MCP run_code scripts kept driving the same tab (DB sessions table showed an extra login). Rule: when UI tests disagree with the API, query the API/DB first; then fix the test before touching app code.$doc$,
+   'When UI tests disagree with the API, verify via API/DB first; fix locators and waits before touching app code',
+   ARRAY['library-m-system','playwright','testing','flaky-tests'], ARRAY['global','testing'],
+   'claude-code-session', 'library-m-system', 'global', 'normal', false, true, 'test_results/ui')
+) AS v(learning_id, category, title, content, summary, tags, applies_to, source, project, scope, priority,
+       always_load, active, source_file)
+WHERE NOT EXISTS (SELECT 1 FROM learnings l WHERE l.learning_id = v.learning_id);
