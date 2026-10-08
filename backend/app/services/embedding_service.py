@@ -43,13 +43,14 @@ def embed_stale(db: Session, embedder: Embedder, only_ids: list[int] | None = No
     return {"total": len(books), "embedded": len(stale), "up_to_date": len(books) - len(stale)}
 
 
-def embed_after_change(db: Session, embedder: Embedder, book_id: int) -> None:
-    """Best-effort re-embed right after a librarian adds/edits a book.
+def embed_after_change(db: Session, embedder: Embedder, book_ids: int | list[int]) -> None:
+    """Best-effort re-embed right after a librarian adds/edits a book (or renames its category).
     If the AI service is down the book is still saved; `python -m scripts.embed_books` catches it up later."""
     if embedder.name == "none":
         return
+    ids = [book_ids] if isinstance(book_ids, int) else book_ids
     try:
-        embed_stale(db, embedder, only_ids=[book_id])
+        embed_stale(db, embedder, only_ids=ids)
     except AIError as e:
         db.rollback()
-        log.warning("embedding skipped for book %s: %s", book_id, e)
+        log.warning("embedding skipped for books %s: %s", ids, e)

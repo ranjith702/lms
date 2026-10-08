@@ -344,6 +344,21 @@ export function Books() {
     catch (err) { toast(err.message, 'error') }
   }
 
+  const renameCategory = async (c) => {
+    const name = window.prompt(`Rename category “${c.name}” to:`, c.name)?.trim()
+    if (!name || name === c.name) return
+    try {
+      await api(`/categories/${c.id}`, { method: 'PUT', body: { name, description: c.description } })
+      toast(`Category renamed to “${name}”.`); cats.reload(); books.reload()
+    } catch (err) { toast(err.message, 'error') }
+  }
+
+  const removeCategory = async (c) => {
+    if (!window.confirm(`Delete category “${c.name}”?`)) return
+    try { await api(`/categories/${c.id}`, { method: 'DELETE' }); toast('Category deleted.'); cats.reload() }
+    catch (err) { toast(err.message, 'error') }
+  }
+
   return (
     <>
       <PageHeader title="Books" intro="Add, edit or remove titles. Books with loan history can't be deleted, so records stay intact.">
@@ -389,6 +404,21 @@ export function Books() {
           aria-label="New category" className="rounded-md border border-line bg-sheet px-3 py-2" />
         <Button variant="quiet">Add category</Button>
       </form>
+
+      {cats.data?.length > 0 && (
+        <ul aria-label="Categories" className="mb-6 flex flex-wrap gap-2">
+          {cats.data.map((c) => (
+            <li key={c.id} className="flex items-center gap-1 rounded-full border border-line bg-sheet py-1 pl-3 pr-1 text-sm">
+              <span>{c.name} <span className="tabular-nums text-ink-soft">({c.book_count})</span></span>
+              <button type="button" onClick={() => renameCategory(c)} aria-label={`Rename ${c.name}`}
+                className="rounded-full px-2 text-ink-soft hover:bg-line">Rename</button>
+              <button type="button" onClick={() => removeCategory(c)} aria-label={`Delete ${c.name}`}
+                disabled={c.book_count > 0} title={c.book_count > 0 ? 'Move or delete its books first' : undefined}
+                className="rounded-full px-2 text-stamp hover:bg-line disabled:cursor-not-allowed disabled:opacity-40">Delete</button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ErrorNote error={books.error} />
       {books.loading ? <Loading /> : !books.data ? null : (

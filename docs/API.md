@@ -20,6 +20,8 @@ Errors are JSON: `{"detail": "message"}` (validation errors: a list of field pro
 | catalog | GET | `/api/categories` | login | List Categories |
 | catalog | POST | `/api/books` | login | Create Book |
 | catalog | POST | `/api/categories` | login | Create Category |
+| catalog | PUT | `/api/categories/{category_id}` | login | Update Category (rename re-embeds its books; 409 on duplicate name) |
+| catalog | DELETE | `/api/categories/{category_id}` | login | Delete Category (409 while it still has books) |
 | catalog | PUT | `/api/books/{book_id}` | login | Update Book |
 | health | GET | `/api/health` | public | Health |
 | loans & fines | GET | `/api/fines` | login | All Fines |

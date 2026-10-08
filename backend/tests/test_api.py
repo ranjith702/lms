@@ -145,3 +145,33 @@ def test_book_validation_and_delete_rules(client, db):
     b = client.post("/api/books", headers=auth(lib), json={"title": "Temp", "author": "Y", "category_id": cat["id"]}).json()
     assert client.delete(f"/api/books/{b['id']}", headers=auth(lib)).status_code == 204
     assert client.get(f"/api/books/{b['id']}", headers=auth(lib)).status_code == 404
+
+
+def test_category_full_crud(client, db):
+    make_user(db, "lib@test.dev", role="librarian", name="Lib")
+    make_user(db, "stu@test.dev")
+    lib = login(client, "lib@test.dev")["access_token"]
+    stu = login(client, "stu@test.dev")["access_token"]
+    # Create
+    c = client.post("/api/categories", json={"name": "Poetry"}, headers=auth(lib))
+    assert c.status_code == 201
+    cid = c.json()["id"]
+    assert client.post("/api/categories", json={"name": "poetry"}, headers=auth(lib)).status_code == 409
+    # Update (rename + description), case-insensitive clash with another category is rejected
+    client.post("/api/categories", json={"name": "Drama"}, headers=auth(lib))
+    r = client.put(f"/api/categories/{cid}", json={"name": "Verse", "description": "Poems"}, headers=auth(lib))
+    assert r.status_code == 200 and r.json()["name"] == "Verse" and r.json()["description"] == "Poems"
+    assert client.put(f"/api/categories/{cid}", json={"name": "DRAMA"}, headers=auth(lib)).status_code == 409
+    assert client.put(f"/api/categories/{cid}", json={"name": "Verse"}, headers=auth(lib)).status_code == 200  # same name ok
+    assert client.put("/api/categories/999", json={"name": "Ghost"}, headers=auth(lib)).status_code == 404
+    # Students may read but not change
+    assert client.put(f"/api/categories/{cid}", json={"name": "X1"}, headers=auth(stu)).status_code == 403
+    assert client.delete(f"/api/categories/{cid}", headers=auth(stu)).status_code == 403
+    # Delete is blocked while books reference it, allowed once empty
+    b = client.post("/api/books", headers=auth(lib), json={"title": "Odes", "author": "Keats", "category_id": cid}).json()
+    assert client.delete(f"/api/categories/{cid}", headers=auth(lib)).status_code == 409
+    assert client.delete(f"/api/books/{b['id']}", headers=auth(lib)).status_code == 204
+    assert client.delete(f"/api/categories/{cid}", headers=auth(lib)).status_code == 204
+    assert client.delete(f"/api/categories/{cid}", headers=auth(lib)).status_code == 404
+    names = [x["name"] for x in client.get("/api/categories", headers=auth(stu)).json()]
+    assert names == ["Drama"]

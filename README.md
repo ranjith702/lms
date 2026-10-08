@@ -32,7 +32,17 @@ React frontend, FastAPI (Python) backend, PostgreSQL database in Docker.
 **Everything is saved in PostgreSQL**: close the app, restart the database, log in again, and your loans,
 fines, login/logout times and activity are still there (tested: see Verification below).
 
-## Run it (Windows, Git Bash or PowerShell)
+## Run it: quick start
+
+```bash
+cp .env.example .env          # then set LMS_JWT_SECRET (and the AI keys below if you want RAG)
+./backend/run.sh              # terminal 1: DB + deps + migrations + seed + embeddings + API on :8000
+./frontend/run.sh             # terminal 2: React app on http://localhost:5173
+```
+
+`backend/run.sh --test` runs pytest; `frontend/run.sh --check` runs lint + build. Both scripts are safe to re-run.
+
+## Run it step by step (Windows, Git Bash or PowerShell)
 
 Needs: Docker Desktop, Python 3.11+, Node 20+.
 
@@ -93,7 +103,7 @@ The login page has buttons that fill these in.
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest -q              # 44 tests, offline (fake AI): rules, races, API, permissions, RAG
+.venv/Scripts/python -m pytest -q              # 45 tests, offline (fake AI): rules, races, API, permissions, RAG
 .venv/Scripts/python -m scripts.smoke_api      # 35 live HTTP checks against the running server
 cd ../frontend && npm run build && npm run lint
 ```

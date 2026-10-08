@@ -37,6 +37,48 @@ def create_category(body: schemas.CategoryIn, db: Session = Depends(get_db), lib
     return schemas.CategoryOut(id=c.id, name=c.name, description=c.description)
 
 
+def _get_category(db: Session, category_id: int) -> Category:
+    c = db.get(Category, category_id)
+    if c is None:
+        raise HTTPException(404, "Category not found")
+    return c
+
+
+def _book_count(db: Session, category_id: int) -> int:
+    return db.scalar(select(func.count()).select_from(Book).where(Book.category_id == category_id))
+
+
+@router.put("/categories/{category_id}", response_model=schemas.CategoryOut)
+def update_category(category_id: int, body: schemas.CategoryIn, db: Session = Depends(get_db),
+                    lib: User = Depends(require_librarian)):
+    c = _get_category(db, category_id)
+    name = body.name.strip()
+    clash = db.scalar(select(Category).where(func.lower(Category.name) == name.lower(), Category.id != category_id))
+    if clash:
+        raise HTTPException(409, "Category already exists")
+    renamed = c.name != name
+    c.name, c.description = name, body.description
+    activity.log(db, lib.id, "category.updated", "category", c.id, name=c.name)
+    db.commit()
+    if renamed:
+        # The category name is part of every book's embedded text, so a rename makes those embeddings stale.
+        book_ids = list(db.scalars(select(Book.id).where(Book.category_id == category_id)))
+        if book_ids:
+            embed_after_change(db, get_embedder(), book_ids)
+    return schemas.CategoryOut(id=c.id, name=c.name, description=c.description, book_count=_book_count(db, c.id))
+
+
+@router.delete("/categories/{category_id}", status_code=204)
+def delete_category(category_id: int, db: Session = Depends(get_db), lib: User = Depends(require_librarian)):
+    c = _get_category(db, category_id)
+    n = _book_count(db, category_id)
+    if n:
+        raise HTTPException(409, f"Category still has {n} book(s); move or delete them first")
+    activity.log(db, lib.id, "category.deleted", "category", c.id, name=c.name)
+    db.delete(c)
+    db.commit()
+
+
 @router.get("/books", response_model=list[schemas.BookOut])
 def list_books(
     q: str | None = Query(None, max_length=200),
