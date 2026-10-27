@@ -3,13 +3,17 @@
 Flow: login -> create a sessions row -> JWT carries that session id (sid).
 Every request: decode JWT -> look up the session -> reject if logged out.
 That is what makes logout real, even though JWTs are normally stateless.
+
+Where the JWT travels: the browser gets it in an httpOnly cookie (JavaScript can't read it,
+so an XSS bug can't steal it). API clients (Postman, tests, scripts) may still send
+`Authorization: Bearer <token>`; the header wins when both are present.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -18,6 +22,7 @@ from app.db import get_db
 from app.models import User, UserSession
 
 ALGORITHM = "HS256"
+COOKIE_NAME = "lms_session"
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -45,13 +50,15 @@ def _unauthorized(detail: str = "Not authenticated") -> HTTPException:
 
 
 def get_current_session(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> UserSession:
-    if creds is None:
+    token = creds.credentials if creds else request.cookies.get(COOKIE_NAME)
+    if not token:
         raise _unauthorized()
     try:
-        payload = jwt.decode(creds.credentials, get_settings().jwt_secret, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=[ALGORITHM])
         sid = uuid.UUID(payload["sid"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise _unauthorized("Invalid or expired token")

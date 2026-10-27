@@ -35,6 +35,8 @@ def clean_tables():
     with engine.begin() as conn:
         tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
         conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+    from app.routers.auth import login_limiter
+    login_limiter.reset()  # in-memory failure counts must not leak between tests
     yield
 
 

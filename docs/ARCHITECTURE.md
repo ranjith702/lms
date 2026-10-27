@@ -12,7 +12,7 @@ If you write down the talk's main steps, each one can be mapped to a section her
 
 ```
  Browser (React SPA, :5173)
-   │  fetch('/api/...') + "Authorization: Bearer <JWT>"
+   │  fetch('/api/...'); the browser attaches the httpOnly cookie lms_session (JWT)
    ▼
  Vite dev proxy  ──►  FastAPI (:8000)
                         │
@@ -34,7 +34,7 @@ into a JSON response. So the same rules can later run from a CLI, a cron job or 
 | Layer | Owns | Does NOT do | Why it pays off here |
 |---|---|---|---|
 | **React pages** | What the user sees and clicks | Business rules | The UI can change without risk to the rules |
-| **api/client.js** | JWT header, error messages, auto-logout on 401 | Page logic | One place to fix network behaviour |
+| **api/client.js** | Same-origin fetch (cookie sent by the browser), error messages, auto-logout on 401 | Page logic | One place to fix network behaviour |
 | **Routers** | URL, input validation, role check | Rules, SQL details | Easy to read the API surface; Swagger is generated from it |
 | **Services** | Every rule (trust, limits, fines, recommendations) | HTTP | Unit-tested directly with fake times (`now=...`) |
 | **Models + Alembic** | Table shapes, constraints, migrations | Rules | Schema changes are versioned and repeatable |
@@ -86,8 +86,21 @@ question
 | Suggestions | `recommend_service._close_in_meaning` | Uses stored vectors only (no API call): each unread book's best cosine match among books you read |
 | Librarian brief | `insights_service.ai_brief` | Sends trust facts, loans and suggestions, **never name or email** |
 
-**Why no vector index:** pgvector indexes up to 2000 dimensions; Nemotron produces 2048. For 64 books an exact
-scan takes about a millisecond. At ~10k+ books, store `halfvec(2048)` (indexable up to 4000 dims) with HNSW.
+**Why no vector index:** pgvector's `vector` type can only be indexed up to 2000 dimensions; Nemotron produces 2048
+([pgvector README](https://github.com/pgvector/pgvector#indexing)). So retrieval is an exact scan, which is also
+the most accurate option: it returns the true nearest books, no approximation.
+
+#### Decision record: when to switch to `halfvec` + HNSW
+
+| | |
+|:--|:--|
+| **Today** | Exact scan. Measured 2026-10-27 on the dev DB: 64 books, all embedded, table 920 kB. `EXPLAIN ANALYZE` of the top-6 cosine query: **2.0–2.2 ms warm** (3.4 ms cold), 5 runs. |
+| **Budget** | Vector step of `assistant_service` retrieval ≤ **50 ms** (proposed; confirm with the team). |
+| **Trigger** | Switch when the measured vector query exceeds the budget, **or** re-measure as soon as the catalog passes **1,000 books**. A straight-line extrapolation of today's number (~0.03 ms/book) reaches 50 ms around ~1,500 books. The earlier "~10k" figure was never measured; don't use it. |
+| **How to measure** | `EXPLAIN ANALYZE SELECT id FROM books WHERE embedding IS NOT NULL ORDER BY embedding <=> (SELECT embedding FROM books WHERE embedding IS NOT NULL LIMIT 1) LIMIT 6;` run 5 times, take the warm runs. |
+| **The switch** | New Alembic revision: add `embedding_half halfvec(2048)`, backfill `embedding::halfvec`, `CREATE INDEX ... USING hnsw (embedding_half halfvec_cosine_ops)`; query with `embedding_half <=> query::halfvec`. `halfvec` can be indexed up to 4000 dims and is half the size (16-bit floats). |
+| **Cost of switching** | HNSW is approximate: tune `hnsw.ef_search` and compare against the exact scan on the paraphrase set in `scripts/test_rag_live.py` before dropping exact search. Changing `LMS_EMBEDDING_MODEL` still needs `scripts.embed_books`. |
+| **Not affected** | Full-text and tag ranking (GIN index) and the RRF fusion stay as they are. |
 
 **Testing it:** `tests/test_rag.py` uses a fake embedder and fake LLM (fast, free, deterministic, run in CI).
 `scripts/test_rag_live.py` asks the real models paraphrased questions (e.g. "stop procrastinating" →
@@ -110,5 +123,5 @@ still work with AI switched off; each book appears in only one section.
 ## Known limits (honest list)
 
 - Recommendations score books in Python: fine for hundreds of books; move into SQL or embeddings at ~10k.
-- `localStorage` holds the JWT: simple and fine for a learning project; production would use an httpOnly cookie.
-- No rate limiting on login yet.
+- The JWT is in an httpOnly cookie (`lms_session`); `Authorization: Bearer` still works for Postman and scripts.
+- Login rate limiting counts failures in memory (`services/rate_limit.py`): one uvicorn worker only, see docs/DEPLOY.md.

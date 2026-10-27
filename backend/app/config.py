@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     fine_per_day: int = 5
     max_active_loans: int = 3
     cors_origins: str = "http://localhost:5173"
+    # Auth cookie: httpOnly so page JavaScript (and any XSS) can never read the JWT.
+    # Must be true behind HTTPS; false only for plain-http local dev.
+    cookie_secure: bool = False
+    # Login throttling: failed attempts allowed inside the window before 429.
+    login_max_failures: int = 5          # per IP + email (guessing one account's password)
+    login_max_failures_per_ip: int = 20  # per IP across all emails (credential stuffing)
+    login_window_seconds: int = 900
     # AI: "none" = keyword search + templated answer; "openrouter" = embeddings + Claude via OpenRouter
     ai_provider: str = "none"
     openrouter_api_key: str = ""

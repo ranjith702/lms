@@ -1,26 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { api, setUnauthorizedHandler, tokenStore } from '../api/client'
+import { api, setUnauthorizedHandler } from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [previousSession, setPreviousSession] = useState(null)
-  // Only "loading" if there is a saved token to check; otherwise show the login page straight away.
-  const [loading, setLoading] = useState(() => !!tokenStore.get())
+  // JavaScript can't see the httpOnly cookie, so on every app start we ask the server who we are.
+  const [loading, setLoading] = useState(true)
 
-  const clear = useCallback(() => { tokenStore.clear(); setUser(null) }, [])
+  const clear = useCallback(() => setUser(null), [])
 
   useEffect(() => {
     setUnauthorizedHandler(clear)
-    if (!tokenStore.get()) return
-    // Re-opening the app: the token is still valid, so restore the user from the server.
+    // 200 = the cookie still holds a live session; 401 = logged out (show Landing).
     api('/auth/me').then(setUser).catch(clear).finally(() => setLoading(false))
   }, [clear])
 
   const login = async (email, password) => {
     const data = await api('/auth/login', { method: 'POST', body: { email, password } })
-    tokenStore.set(data.access_token)
     setPreviousSession(data.previous_session)
     setUser(data.user)
     return data.user

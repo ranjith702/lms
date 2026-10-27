@@ -64,8 +64,8 @@ python -m venv .venv
 
 # 4. Frontend (new terminal)
 cd frontend
-npm install
-npm run dev          # http://localhost:5173
+corepack pnpm install   # pnpm is our standard; corepack ships with Node and uses the pinned version
+corepack pnpm run dev   # http://localhost:5173
 ```
 
 ### Turn on the AI (optional)
@@ -103,9 +103,9 @@ The login page has buttons that fill these in.
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest -q              # 45 tests, offline (fake AI): rules, races, API, permissions, RAG
+.venv/Scripts/python -m pytest -q              # 53 tests, offline (fake AI): rules, races, API, permissions, RAG
 .venv/Scripts/python -m scripts.smoke_api      # 35 live HTTP checks against the running server
-cd ../frontend && npm run build && npm run lint
+cd ../frontend && corepack pnpm run build && corepack pnpm run lint
 ```
 
 Last results (2026-10-07): pytest **44 passed**; smoke **35/35**; live RAG test **10/10**
