@@ -14,6 +14,7 @@ from app.services import activity
 from app.services.embedding_service import embed_after_change
 
 router = APIRouter(tags=["catalog"])
+SHELF_LIMIT = 40
 
 
 @router.get("/categories", response_model=list[schemas.CategoryOut])
@@ -23,6 +24,28 @@ def list_categories(db: Session = Depends(get_db), _: User = Depends(get_current
         .group_by(Category.id).order_by(Category.name)
     ).all()
     return [schemas.CategoryOut(id=c.id, name=c.name, description=c.description, book_count=n) for c, n in rows]
+
+
+@router.get("/public/shelf", response_model=schemas.ShelfOut)
+def public_shelf(db: Session = Depends(get_db)):
+    """No login needed: what the landing page shows. Titles, authors and categories only."""
+    rows = db.execute(
+        select(Category, func.count(Book.id)).outerjoin(Book, Book.category_id == Category.id)
+        .group_by(Category.id).order_by(Category.name)
+    ).all()
+    # Deal books out one category at a time so every shelf is represented, not just the first few by id.
+    by_cat: dict[int, list[Book]] = {}
+    for b in db.scalars(select(Book).options(joinedload(Book.category)).order_by(Book.id)):
+        by_cat.setdefault(b.category_id, []).append(b)
+    queues, books = list(by_cat.values()), []
+    while queues and len(books) < SHELF_LIMIT:
+        queues = [q for q in queues if q]
+        books += [q.pop(0) for q in queues][: SHELF_LIMIT - len(books)]
+    return schemas.ShelfOut(
+        categories=[schemas.CategoryOut(id=c.id, name=c.name, description=c.description, book_count=n) for c, n in rows],
+        books=[schemas.ShelfBook(id=b.id, title=b.title, author=b.author, category_name=b.category.name,
+                                 cover_color=b.cover_color) for b in books],
+    )
 
 
 @router.post("/categories", response_model=schemas.CategoryOut, status_code=201)

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import { Button, ErrorNote } from '../components/ui'
+import Shelf from '../components/Shelf'
+import { BrandMark, Button, ErrorNote, useApi } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 
 const DEMO = [
@@ -13,15 +14,17 @@ const DEMO = [
 ]
 
 function Shell({ title, children }) {
+  const shelf = useApi(() => api('/public/shelf'))
   return (
     <div className="grid min-h-screen md:grid-cols-2">
-      <div className="hidden flex-col justify-end bg-room p-12 text-white md:flex">
-        <p className="font-book text-4xl font-semibold leading-tight">Borrow a book in one click.<br />Bring it back on time,<br />and it stays that way.</p>
-        <p className="mt-4 max-w-md text-white/75">Students with a good return record borrow instantly. Late returns and unpaid fines send requests to the librarian first.</p>
+      <div className="hidden flex-col justify-between gap-10 border-r border-line bg-room-soft/60 p-12 md:flex">
+        <p className="font-book text-4xl leading-tight font-semibold text-room-deep">Borrow a book in one click.<br />Bring it back on time,<br />and it stays that way.</p>
+        {shelf.data?.books?.length > 0 && <Shelf books={shelf.data.books} compact />}
+        <p className="max-w-md text-ink-soft">Students with a good return record borrow instantly. Late returns and unpaid fines send requests to the librarian first.</p>
       </div>
       <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          <div className="font-book text-xl font-semibold text-room">Reading Room</div>
+          <Link to="/" className="flex items-center gap-2 font-book text-xl font-semibold text-room-deep"><BrandMark />Reading Room</Link>
           <h1 className="mt-6 text-2xl font-semibold">{title}</h1>
           {children}
         </div>

@@ -15,6 +15,17 @@ export function Button({ variant = 'primary', className = '', ...props }) {
   )
 }
 
+// Open book seen from above: the brand glyph beside "Reading Room".
+export function BrandMark({ className = 'h-6 w-6' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" strokeWidth="1.8" strokeLinejoin="round">
+      <path d="M12 6.5C10 5 7 4.5 3 5v13c4-.5 7 0 9 1.5V6.5Z" fill="var(--color-room)" stroke="var(--color-room)" />
+      <path d="M12 6.5c2-1.5 5-2 9-1.5v13c-4-.5-7 0-9 1.5V6.5Z" fill="var(--color-room-soft)" stroke="var(--color-room)" />
+      <path d="M15 9.5c1.5-.4 2.7-.5 4-.4" stroke="var(--color-brass)" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function PageHeader({ title, children, intro }) {
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">

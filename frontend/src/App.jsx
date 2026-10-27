@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { Loading } from './components/ui'
 import { useAuth } from './context/AuthContext'
+import Landing from './pages/Landing'
 import * as L from './pages/librarian/LibrarianPages'
 import { Login, Register } from './pages/Login'
 import * as S from './pages/student/StudentPages'
@@ -13,8 +14,10 @@ export default function App() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="*" element={<Login />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
   }

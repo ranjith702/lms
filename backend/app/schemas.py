@@ -85,6 +85,20 @@ class BookOut(ORM):
     cover_color: str
 
 
+class ShelfBook(BaseModel):
+    """Public, minimal book info for the landing-page shelf (no copies, ISBN or descriptions)."""
+    id: int
+    title: str
+    author: str
+    category_name: str
+    cover_color: str
+
+
+class ShelfOut(BaseModel):
+    categories: list[CategoryOut]
+    books: list[ShelfBook]
+
+
 # ---------- loans / fines ----------
 class BorrowIn(BaseModel):
     book_id: int

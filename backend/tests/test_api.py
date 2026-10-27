@@ -175,3 +175,25 @@ def test_category_full_crud(client, db):
     assert client.delete(f"/api/categories/{cid}", headers=auth(lib)).status_code == 404
     names = [x["name"] for x in client.get("/api/categories", headers=auth(stu)).json()]
     assert names == ["Drama"]
+
+
+def test_public_shelf_needs_no_login_and_hides_stock_details(client, db):
+    cat = make_category(db, "Sci-Fi")
+    for i in range(3):
+        make_book(db, cat, title=f"Book {i}", copies=2)
+    r = client.get("/api/public/shelf")
+    assert r.status_code == 200
+    body = r.json()
+    assert [c["name"] for c in body["categories"]] == ["Sci-Fi"] and body["categories"][0]["book_count"] == 3
+    assert len(body["books"]) == 3
+    assert set(body["books"][0]) == {"id", "title", "author", "category_name", "cover_color"}
+
+
+def test_public_shelf_spreads_books_across_categories(client, db):
+    big, small = make_category(db, "Big"), make_category(db, "Small")
+    for i in range(45):
+        make_book(db, big, title=f"Big {i}")
+    make_book(db, small, title="Only small one")
+    books = client.get("/api/public/shelf").json()["books"]
+    assert len(books) == 40
+    assert "Only small one" in [b["title"] for b in books]

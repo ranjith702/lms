@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fmtDate } from '../api/client'
+import { motifClass } from '../lib/categories'
 
 /**
  * A book on the shelf. Click the cover to flip it and read the description.
@@ -38,12 +39,12 @@ export default function BookCard({ book, onBorrow, reason, disabled }) {
         aria-label={`${book.title} by ${book.author}. ${flipped ? 'Showing description' : 'Press to read description'}`}
       >
         <div className="book-inner">
-          <div className="book-face book-front flex flex-col justify-between p-4 pl-6 text-white" style={{ background: book.cover_color }}>
-            <div>
+          <div className={`book-face book-front flex flex-col justify-between p-4 pl-6 text-white ${motifClass(book.category_name)}`} style={{ background: book.cover_color }}>
+            <div className="relative z-10">
               <h3 className="font-book text-lg font-semibold leading-snug">{book.title}</h3>
               <p className="mt-2 text-sm text-white/80">{book.author}</p>
             </div>
-            <p className="text-xs text-white/70">{book.category_name}</p>
+            <p className="relative z-10 text-xs text-white/75">{book.category_name}</p>
             {stamp && (
               <div className="stamp">
                 {stamp.kind === 'due' ? (<><div className="text-sm">DUE</div><div className="text-base">{fmtDate(stamp.date)}</div></>)

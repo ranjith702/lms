@@ -6,6 +6,7 @@ import RichText from '../../components/RichText'
 import {
   Button, Empty, ErrorNote, Loading, PageHeader, Panel, StatusPill, TrustBadge, useApi, useToast,
 } from '../../components/ui'
+import { motifClass } from '../../lib/categories'
 
 function useBorrow(onDone) {
   const toast = useToast()
@@ -56,17 +57,27 @@ export function Catalog() {
       <form className="mb-6 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()) }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, author or topic"
           aria-label="Search books" className="min-w-60 flex-1 rounded-md border border-line bg-sheet px-3 py-2" />
-        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category"
-          className="rounded-md border border-line bg-sheet px-3 py-2">
-          <option value="">All categories</option>
-          {cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.book_count})</option>)}
-        </select>
         <label className="flex items-center gap-2 px-2 text-sm">
           <input type="checkbox" checked={onlyAvailable} onChange={(e) => setOnlyAvailable(e.target.checked)} /> On the shelf
         </label>
         <Button>Search</Button>
         {query && <Button type="button" variant="quiet" onClick={() => { setQ(''); setQuery('') }}>Clear</Button>}
       </form>
+
+      {cats.data?.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter by category">
+          {[{ id: '', name: 'All categories', book_count: null }, ...cats.data].map((c) => {
+            const on = String(category) === String(c.id)
+            return (
+              <button key={c.id || 'all'} type="button" aria-pressed={on} onClick={() => setCategory(c.id)}
+                className={`flex items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm transition ${on ? 'border-room bg-room text-white' : 'border-line bg-sheet text-ink hover:border-room'}`}>
+                <span className={`relative h-6 w-6 overflow-hidden rounded-full ${c.id ? motifClass(c.name) : ''} ${on ? 'bg-room-deep' : 'bg-room'}`} aria-hidden="true" />
+                {c.name}{c.book_count != null && <span className={on ? 'text-white/75' : 'text-ink-soft'}>{c.book_count}</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <ErrorNote error={books.error} />
       {books.loading ? <Loading label="Fetching the shelves" /> : !books.data ? null : books.data?.length === 0 ? (
